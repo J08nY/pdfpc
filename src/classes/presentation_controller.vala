@@ -1445,7 +1445,7 @@ namespace pdfpc {
                 "Toggle the toolbox");
 
             add_action("zoom", this.toggle_zoom,
-                "Toggle zoom mode for the highlighted area");
+                "Toggle zoom mode or re-target zoom to the highlighted area");
 
             add_action("toggleMaxCurrent", this.toggle_max_current_view,
                 "(Un)maximize the current slide view");
