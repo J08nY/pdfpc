@@ -2243,10 +2243,13 @@ namespace pdfpc {
          * Zoom in the highlighted area
          */
         protected void toggle_zoom() {
+            bool has_valid_highlight =
+                this.annotation_mode == AnnotationMode.POINTER &&
+                this.highlight.width > 0.01 &&
+                this.highlight.height > 0.01;
+
             if (!this.in_zoom) {
-                if (this.annotation_mode != AnnotationMode.POINTER ||
-                    this.highlight.width  <= 0.01 ||
-                    this.highlight.height <= 0.01) {
+                if (!has_valid_highlight) {
                     return;
                 }
 
@@ -2263,18 +2266,25 @@ namespace pdfpc {
 
                 this.in_zoom = true;
             } else {
-                this.zoom_request(null);
+                if (has_valid_highlight) {
+                    this.zoom_viewport = this.highlight;
+                    this.normalize_zoom_viewport();
+                    this.zoom_request(this.zoom_viewport);
+                    this.zoom_pan_active = false;
+                } else {
+                    this.zoom_request(null);
 
-                this.in_zoom = false;
-                this.zoom_pan_active = false;
+                    this.in_zoom = false;
+                    this.zoom_pan_active = false;
 
-                // restore the drawings and the highlighted area
-                if (!this.zoom_drawing_modified) {
-                    this.pen_drawing_present = this.zoom_stack_drawing;
-                    this.hide_or_show_pen_surfaces();
-                }
-                if (!this.zoom_highlight_modified) {
-                    this.highlight = this.zoom_stack_highlight;
+                    // restore the drawings and the highlighted area
+                    if (!this.zoom_drawing_modified) {
+                        this.pen_drawing_present = this.zoom_stack_drawing;
+                        this.hide_or_show_pen_surfaces();
+                    }
+                    if (!this.zoom_highlight_modified) {
+                        this.highlight = this.zoom_stack_highlight;
+                    }
                 }
             }
 
