@@ -110,6 +110,7 @@ namespace pdfpc {
                 this.highlight.width = 0;
                 this.highlight.height = 0;
                 this.in_zoom = false;
+                this.zoom_pan_active = false;
             }
 
             this.controllables_update();
@@ -234,6 +235,12 @@ namespace pdfpc {
          */
         protected bool zoom_stack_drawing = false;
         protected ScaledRectangle zoom_stack_highlight;
+        protected ScaledRectangle zoom_viewport;
+        protected bool zoom_highlight_modified = false;
+        protected bool zoom_drawing_modified = false;
+        protected bool zoom_pan_active = false;
+        protected double zoom_pan_last_x = 0;
+        protected double zoom_pan_last_y = 0;
 
         /**
          * The number of slides in the presentation
@@ -676,6 +683,98 @@ namespace pdfpc {
             return is_eraser_active() || is_pen_active();
         }
 
+        public bool zoom_pan_in_progress() {
+            return this.zoom_pan_active;
+        }
+
+        private void clamp_zoom_viewport() {
+            if (this.zoom_viewport.width < 0.01) {
+                this.zoom_viewport.width = 0.01;
+            } else if (this.zoom_viewport.width > 1.0) {
+                this.zoom_viewport.width = 1.0;
+            }
+
+            if (this.zoom_viewport.height < 0.01) {
+                this.zoom_viewport.height = 0.01;
+            } else if (this.zoom_viewport.height > 1.0) {
+                this.zoom_viewport.height = 1.0;
+            }
+
+            this.zoom_viewport.x = double.min(
+                double.max(this.zoom_viewport.x, 0),
+                1.0 - this.zoom_viewport.width
+            );
+            this.zoom_viewport.y = double.min(
+                double.max(this.zoom_viewport.y, 0),
+                1.0 - this.zoom_viewport.height
+            );
+        }
+
+        private void normalize_zoom_viewport() {
+            if (this.zoom_viewport.width > this.zoom_viewport.height) {
+                this.zoom_viewport.height /= this.zoom_viewport.width;
+                this.zoom_viewport.width = 1;
+                this.zoom_viewport.x = 0;
+                this.zoom_viewport.y = (1 - this.zoom_viewport.height)/2;
+            } else {
+                this.zoom_viewport.width /= this.zoom_viewport.height;
+                this.zoom_viewport.height = 1;
+                this.zoom_viewport.x = (1 - this.zoom_viewport.width)/2;
+                this.zoom_viewport.y = 0;
+            }
+            this.clamp_zoom_viewport();
+        }
+
+        public void map_input_coordinates(double x, double y,
+            out double mapped_x, out double mapped_y) {
+            if (this.in_zoom) {
+                mapped_x = this.zoom_viewport.x + x*this.zoom_viewport.width;
+                mapped_y = this.zoom_viewport.y + y*this.zoom_viewport.height;
+                mapped_x = double.max(0, double.min(1, mapped_x));
+                mapped_y = double.max(0, double.min(1, mapped_y));
+            } else {
+                mapped_x = x;
+                mapped_y = y;
+            }
+        }
+
+        public bool start_zoom_pan(double x, double y) {
+            if (!this.in_zoom) {
+                return false;
+            }
+            this.zoom_pan_active = true;
+            this.zoom_pan_last_x = x;
+            this.zoom_pan_last_y = y;
+            return true;
+        }
+
+        public void end_zoom_pan() {
+            this.zoom_pan_active = false;
+        }
+
+        public bool update_zoom_pan(double x, double y) {
+            if (!this.zoom_pan_active || !this.in_zoom) {
+                return false;
+            }
+
+            this.pan_zoom_view((x - this.zoom_pan_last_x)*this.zoom_viewport.width,
+                (y - this.zoom_pan_last_y)*this.zoom_viewport.height);
+            this.zoom_pan_last_x = x;
+            this.zoom_pan_last_y = y;
+            return true;
+        }
+
+        private void pan_zoom_view(double dx, double dy) {
+            if (!this.in_zoom) {
+                return;
+            }
+
+            this.zoom_viewport.x += dx;
+            this.zoom_viewport.y += dy;
+            this.clamp_zoom_viewport();
+            this.zoom_request(this.zoom_viewport);
+        }
+
         public bool in_pointing_mode() {
             return is_pointer_active() || is_spotlight_active();
         }
@@ -796,10 +895,6 @@ namespace pdfpc {
                 return;
             }
 
-            if (this.in_zoom) {
-                return;
-            }
-
             this.annotation_mode = mode;
 
             switch (mode) {
@@ -866,15 +961,14 @@ namespace pdfpc {
         }
 
         public void toggle_drawings() {
-            if (this.in_zoom) {
-                return;
-            }
-
             pen_drawing_present = !pen_drawing_present;
             if (!pen_drawing_present && in_drawing_mode()) {
                 this.set_mode(AnnotationMode.NORMAL);
             } else {
                 hide_or_show_pen_surfaces();
+            }
+            if (this.in_zoom) {
+                this.zoom_drawing_modified = true;
             }
         }
 
@@ -1101,6 +1195,25 @@ namespace pdfpc {
             this.update_highlight(pointer_x, pointer_y);
         }
 
+        private void pan_zoom_view_to_string(Variant? point) {
+            if (!this.in_zoom) {
+                return;
+            }
+
+            try {
+                GLib.Regex regex = new GLib.Regex("([^,]+),([^,]+)");
+                string[] parts = regex.split(point.get_string());
+                if (parts.length != 4) {
+                    return;
+                }
+                var dx = double.parse(parts[1]);
+                var dy = double.parse(parts[2]);
+                this.pan_zoom_view(dx, dy);
+            } catch (Error e) {
+                return;
+            }
+        }
+
         public bool on_move_pointer() {
             // restart the pointer timeout timer
             this.restart_pointer_timer();
@@ -1118,8 +1231,20 @@ namespace pdfpc {
                 this.highlight.height=Math.fabs(drag_y-y);
                 this.highlight.x=(drag_x<x?drag_x:x);
                 this.highlight.y=(drag_y<y?drag_y:y);
+                if (this.in_zoom) {
+                    this.zoom_highlight_modified = true;
+                }
                 queue_pointer_surface_draws();
             }
+        }
+
+        public void clear_highlight() {
+            this.highlight.width = 0;
+            this.highlight.height = 0;
+            if (this.in_zoom) {
+                this.zoom_highlight_modified = true;
+            }
+            this.queue_pointer_surface_draws();
         }
 
         public void increase_pointer_size() {
@@ -1316,6 +1441,9 @@ namespace pdfpc {
             add_action_with_parameter("movePointer", GLib.VariantType.STRING,
                 this.move_pointer,
                 "Move pointer by vector", "(x,y)");
+            add_action_with_parameter("panZoom", GLib.VariantType.STRING,
+                this.pan_zoom_view_to_string,
+                "Pan zoom viewport by vector", "(x,y)");
 
             add_action("showQRcode", this.show_qrcode,
                 "Show QR code");
@@ -2113,41 +2241,32 @@ namespace pdfpc {
                     return;
                 }
 
-                this.zoom_request(this.highlight);
-
                 /* keep the state to be altered by zoom */
                 this.zoom_stack_highlight = this.highlight;
                 this.zoom_stack_drawing   = this.pen_drawing_present;
+                this.zoom_highlight_modified = false;
+                this.zoom_drawing_modified = false;
+                this.zoom_pan_active = false;
 
-                // update the selection
-                if (this.highlight.width > this.highlight.height) {
-                    this.highlight.height /= this.highlight.width;
-                    this.highlight.width = 1;
-                    this.highlight.x = 0;
-                    this.highlight.y = (1 - this.highlight.height)/2;
-                } else {
-                    this.highlight.width /= this.highlight.height;
-                    this.highlight.height = 1;
-                    this.highlight.x = (1 - this.highlight.width)/2;
-                    this.highlight.y = 0;
-                }
-
-                // switch off the drawings
-                if (this.pen_drawing_present) {
-                    this.toggle_drawings();
-                }
+                this.zoom_viewport = this.highlight;
+                this.normalize_zoom_viewport();
+                this.zoom_request(this.zoom_viewport);
 
                 this.in_zoom = true;
             } else {
                 this.zoom_request(null);
 
                 this.in_zoom = false;
+                this.zoom_pan_active = false;
 
                 // restore the drawings and the highlighted area
-                if (this.zoom_stack_drawing) {
-                    this.toggle_drawings();
+                if (!this.zoom_drawing_modified) {
+                    this.pen_drawing_present = this.zoom_stack_drawing;
+                    this.hide_or_show_pen_surfaces();
                 }
-                this.highlight = this.zoom_stack_highlight;
+                if (!this.zoom_highlight_modified) {
+                    this.highlight = this.zoom_stack_highlight;
+                }
             }
 
             this.queue_pointer_surface_draws();

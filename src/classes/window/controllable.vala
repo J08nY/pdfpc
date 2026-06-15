@@ -402,9 +402,20 @@ namespace pdfpc.Window {
             this.device_to_normalized(event.x, event.y,
                 out controller.pointer_x, out controller.pointer_y);
 
+            if (controller.zoom_pan_in_progress()) {
+                return controller.update_zoom_pan(controller.pointer_x,
+                    controller.pointer_y);
+            }
+
             if (controller.in_pointing_mode()) {
                 return controller.on_move_pointer();
             } else if (controller.in_drawing_mode()) {
+                double mapped_x, mapped_y;
+                controller.map_input_coordinates(controller.pointer_x,
+                    controller.pointer_y, out mapped_x, out mapped_y);
+                controller.pointer_x = mapped_x;
+                controller.pointer_y = mapped_y;
+
                 var dev = event.get_source_device();
                 if (!Options.disable_input_autodetection) {
                     Gdk.InputSource source_type = dev.get_source();
@@ -442,16 +453,22 @@ namespace pdfpc.Window {
         }
 
         protected bool v_on_button_press(Gdk.EventButton event) {
+            double x, y;
+            this.device_to_normalized(event.x, event.y, out x, out y);
+
+            if (event.button == 2 && controller.start_zoom_pan(x, y)) {
+                return true;
+            }
+
             if (controller.is_pointer_active()) {
-                this.device_to_normalized(event.x, event.y,
-                    out controller.drag_x, out controller.drag_y);
-                controller.highlight.width = 0;
-                controller.highlight.height = 0;
+                controller.drag_x = x;
+                controller.drag_y = y;
+                controller.clear_highlight();
                 return true;
             } else if (controller.in_drawing_mode()) {
-                double x, y;
-                this.device_to_normalized(event.x, event.y, out x, out y);
-                controller.move_pen(x, y);
+                double mapped_x, mapped_y;
+                controller.map_input_coordinates(x, y, out mapped_x, out mapped_y);
+                controller.move_pen(mapped_x, mapped_y);
                 controller.pen_is_pressed = true;
                 return true;
             } else {
@@ -460,6 +477,11 @@ namespace pdfpc.Window {
         }
 
         protected bool v_on_button_release(Gdk.EventButton event) {
+            if (event.button == 2 && controller.zoom_pan_in_progress()) {
+                controller.end_zoom_pan();
+                return true;
+            }
+
             if (controller.is_pointer_active()) {
                 double x, y;
                 this.device_to_normalized(event.x, event.y, out x, out y);
@@ -470,7 +492,9 @@ namespace pdfpc.Window {
             } else if (controller.in_drawing_mode()) {
                 double x, y;
                 this.device_to_normalized(event.x, event.y, out x, out y);
-                controller.move_pen(x, y);
+                double mapped_x, mapped_y;
+                controller.map_input_coordinates(x, y, out mapped_x, out mapped_y);
+                controller.move_pen(mapped_x, mapped_y);
                 controller.pen_is_pressed = false;
                 return true;
             } else {
