@@ -715,11 +715,11 @@ namespace pdfpc {
                 this.zoom_viewport.height /= this.zoom_viewport.width;
                 this.zoom_viewport.width = 1;
                 this.zoom_viewport.x = 0;
-                this.zoom_viewport.y = (1 - this.zoom_viewport.height)/2;
+                this.zoom_viewport.y = (1 - this.zoom_viewport.height) / 2;
             } else {
                 this.zoom_viewport.width /= this.zoom_viewport.height;
                 this.zoom_viewport.height = 1;
-                this.zoom_viewport.x = (1 - this.zoom_viewport.width)/2;
+                this.zoom_viewport.x = (1 - this.zoom_viewport.width) / 2;
                 this.zoom_viewport.y = 0;
             }
             this.clamp_zoom_viewport();
@@ -1201,13 +1201,12 @@ namespace pdfpc {
             }
 
             try {
-                GLib.Regex regex = new GLib.Regex("([^,]+),([^,]+)");
-                string[] parts = regex.split(point.get_string());
-                if (parts.length != 4) {
+                string[] parts = point.get_string().split(",");
+                if (parts.length != 2) {
                     return;
                 }
-                var dx = double.parse(parts[1]);
-                var dy = double.parse(parts[2]);
+                var dx = double.parse(parts[0].strip());
+                var dy = double.parse(parts[1].strip());
                 this.pan_zoom_view(dx, dy);
             } catch (Error e) {
                 return;
