@@ -726,10 +726,21 @@ namespace pdfpc {
         public void map_input_coordinates(double x, double y,
             out double mapped_x, out double mapped_y) {
             if (this.in_zoom) {
-                mapped_x = this.zoom_viewport.x + x*this.zoom_viewport.width;
-                mapped_y = this.zoom_viewport.y + y*this.zoom_viewport.height;
+                mapped_x = this.zoom_viewport.x + x * this.zoom_viewport.width;
+                mapped_y = this.zoom_viewport.y + y * this.zoom_viewport.height;
                 mapped_x = double.max(0, double.min(1, mapped_x));
                 mapped_y = double.max(0, double.min(1, mapped_y));
+            } else {
+                mapped_x = x;
+                mapped_y = y;
+            }
+        }
+
+        public void map_output_coordinates(double x, double y,
+            out double mapped_x, out double mapped_y) {
+            if (this.in_zoom) {
+                mapped_x = (x - this.zoom_viewport.x) / this.zoom_viewport.width;
+                mapped_y = (y - this.zoom_viewport.y) / this.zoom_viewport.height;
             } else {
                 mapped_x = x;
                 mapped_y = y;
@@ -755,8 +766,8 @@ namespace pdfpc {
                 return false;
             }
 
-            this.pan_zoom_view((x - this.zoom_pan_last_x)*this.zoom_viewport.width,
-                (y - this.zoom_pan_last_y)*this.zoom_viewport.height);
+            this.pan_zoom_view((x - this.zoom_pan_last_x) * this.zoom_viewport.width,
+                (y - this.zoom_pan_last_y) * this.zoom_viewport.height);
             this.zoom_pan_last_x = x;
             this.zoom_pan_last_y = y;
             return true;
@@ -1217,7 +1228,9 @@ namespace pdfpc {
             this.pointer_hidden = false;
 
             this.queue_pointer_surface_draws();
-            this.update_highlight(pointer_x, pointer_y);
+            double mapped_x, mapped_y;
+            this.map_input_coordinates(pointer_x, pointer_y, out mapped_x, out mapped_y);
+            this.update_highlight(mapped_x, mapped_y);
 
             return true;
         }
