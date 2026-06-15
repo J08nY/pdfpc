@@ -230,12 +230,17 @@ namespace pdfpc.Window {
             // made unintentionally by mouse clicks
             if (!c.current_pointer.is_spotlight &&
                 c.highlight.width > 0.01 && c.highlight.height > 0.01) {
+                double hx1, hy1, hx2, hy2;
+                c.map_output_coordinates(c.highlight.x, c.highlight.y, out hx1, out hy1);
+                c.map_output_coordinates(c.highlight.x + c.highlight.width,
+                    c.highlight.y + c.highlight.height, out hx2, out hy2);
+
                 context.rectangle(0, 0, a.width, a.height);
                 context.new_sub_path();
-                context.rectangle((int)(c.highlight.x*a.width),
-                                  (int)(c.highlight.y*a.height),
-                                  (int)(c.highlight.width*a.width),
-                                  (int)(c.highlight.height*a.height));
+                context.rectangle((int)(hx1 * a.width),
+                                  (int)(hy1 * a.height),
+                                  (int)((hx2 - hx1) * a.width),
+                                  (int)((hy2 - hy1) * a.height));
 
                 context.set_fill_rule(Cairo.FillRule.EVEN_ODD);
                 context.set_source_rgba(0,0,0,0.5);
@@ -275,21 +280,33 @@ namespace pdfpc.Window {
             if (c.pen_drawing != null) {
                 Cairo.Surface? drawing_surface =
                     c.pen_drawing.render_to_surface();
-                int x = (int)(a.width*c.pen_last_x);
-                int y = (int)(a.height*c.pen_last_y);
                 int base_width = c.pen_drawing.width;
                 int base_height = c.pen_drawing.height;
+                double tx0, ty0, tx1, ty1;
+                c.map_output_coordinates(0, 0, out tx0, out ty0);
+                c.map_output_coordinates(1, 1, out tx1, out ty1);
+
                 Cairo.Matrix old_xform = context.get_matrix();
+                context.translate(tx0 * a.width, ty0 * a.height);
                 context.scale(
-                    (double) a.width / base_width,
-                    (double) a.height / base_height
+                    (tx1 - tx0) * (double) a.width / base_width,
+                    (ty1 - ty0) * (double) a.height / base_height
                 );
                 context.set_source_surface(drawing_surface, 0, 0);
                 context.paint();
                 context.set_matrix(old_xform);
                 if (this.interactive && c.in_drawing_mode() &&
                     !c.pointer_hidden) {
+                    double pen_x, pen_y;
+                    c.map_output_coordinates(c.pen_last_x, c.pen_last_y,
+                        out pen_x, out pen_y);
+                    int x = (int)(a.width * pen_x);
+                    int y = (int)(a.height * pen_y);
+
                     double width_adjustment = (double) a.width / base_width;
+                    if (c.in_zoom) {
+                        width_adjustment /= (tx1 - tx0);
+                    }
                     context.set_operator(Cairo.Operator.OVER);
                     context.set_line_width(2.0);
                     context.set_source_rgba(
@@ -402,6 +419,11 @@ namespace pdfpc.Window {
             this.device_to_normalized(event.x, event.y,
                 out controller.pointer_x, out controller.pointer_y);
 
+            if (controller.zoom_pan_in_progress()) {
+                return controller.update_zoom_pan(controller.pointer_x,
+                    controller.pointer_y);
+            }
+
             if (controller.in_pointing_mode()) {
                 return controller.on_move_pointer();
             } else if (controller.in_drawing_mode()) {
@@ -442,16 +464,22 @@ namespace pdfpc.Window {
         }
 
         protected bool v_on_button_press(Gdk.EventButton event) {
+            double x, y;
+            this.device_to_normalized(event.x, event.y, out x, out y);
+
+            if (event.button == 2 && controller.start_zoom_pan(x, y)) {
+                return true;
+            }
+
             if (controller.is_pointer_active()) {
-                this.device_to_normalized(event.x, event.y,
+                controller.map_input_coordinates(x, y,
                     out controller.drag_x, out controller.drag_y);
-                controller.highlight.width = 0;
-                controller.highlight.height = 0;
+                controller.clear_highlight();
                 return true;
             } else if (controller.in_drawing_mode()) {
-                double x, y;
-                this.device_to_normalized(event.x, event.y, out x, out y);
-                controller.move_pen(x, y);
+                double mapped_x, mapped_y;
+                controller.map_input_coordinates(x, y, out mapped_x, out mapped_y);
+                controller.move_pen(mapped_x, mapped_y);
                 controller.pen_is_pressed = true;
                 return true;
             } else {
@@ -460,17 +488,26 @@ namespace pdfpc.Window {
         }
 
         protected bool v_on_button_release(Gdk.EventButton event) {
+            if (event.button == 2 && controller.zoom_pan_in_progress()) {
+                controller.end_zoom_pan();
+                return true;
+            }
+
             if (controller.is_pointer_active()) {
                 double x, y;
                 this.device_to_normalized(event.x, event.y, out x, out y);
-                controller.update_highlight(x, y);
+                double mapped_x, mapped_y;
+                controller.map_input_coordinates(x, y, out mapped_x, out mapped_y);
+                controller.update_highlight(mapped_x, mapped_y);
                 controller.drag_x = -1;
                 controller.drag_y = -1;
                 return true;
             } else if (controller.in_drawing_mode()) {
                 double x, y;
                 this.device_to_normalized(event.x, event.y, out x, out y);
-                controller.move_pen(x, y);
+                double mapped_x, mapped_y;
+                controller.map_input_coordinates(x, y, out mapped_x, out mapped_y);
+                controller.move_pen(mapped_x, mapped_y);
                 controller.pen_is_pressed = false;
                 return true;
             } else {
