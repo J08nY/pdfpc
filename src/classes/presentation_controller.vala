@@ -809,6 +809,9 @@ namespace pdfpc {
 
         public void move_pen(double x, double y) {
             if (this.pen_is_pressed) {
+                if (this.in_zoom) {
+                    this.zoom_drawing_modified = true;
+                }
                 pen_drawing.add_line(this.current_pen_drawing_tool,
                 this.pen_last_x, this.pen_last_y, x, y);
             }
@@ -1070,7 +1073,9 @@ namespace pdfpc {
             this.restart_pointer_timer();
             this.pointer_hidden = false;
 
-            move_pen(pointer_x, pointer_y);
+            double mapped_x, mapped_y;
+            this.map_input_coordinates(pointer_x, pointer_y, out mapped_x, out mapped_y);
+            move_pen(mapped_x, mapped_y);
 
             return true;
         }
