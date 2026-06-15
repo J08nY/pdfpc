@@ -1429,7 +1429,7 @@ namespace pdfpc {
                 "Toggle the toolbox");
 
             add_action("zoom", this.toggle_zoom,
-                "Zoom in the highlighted area");
+                "Toggle zoom mode for the highlighted area");
 
             add_action("toggleMaxCurrent", this.toggle_max_current_view,
                 "(Un)maximize the current slide view");
