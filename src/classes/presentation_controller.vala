@@ -712,15 +712,13 @@ namespace pdfpc {
 
         private void normalize_zoom_viewport() {
             if (this.zoom_viewport.width > this.zoom_viewport.height) {
-                this.zoom_viewport.height /= this.zoom_viewport.width;
-                this.zoom_viewport.width = 1;
-                this.zoom_viewport.x = 0;
-                this.zoom_viewport.y = (1 - this.zoom_viewport.height) / 2;
-            } else {
-                this.zoom_viewport.width /= this.zoom_viewport.height;
-                this.zoom_viewport.height = 1;
-                this.zoom_viewport.x = (1 - this.zoom_viewport.width) / 2;
-                this.zoom_viewport.y = 0;
+                var delta = this.zoom_viewport.width - this.zoom_viewport.height;
+                this.zoom_viewport.y -= delta / 2;
+                this.zoom_viewport.height = this.zoom_viewport.width;
+            } else if (this.zoom_viewport.height > this.zoom_viewport.width) {
+                var delta = this.zoom_viewport.height - this.zoom_viewport.width;
+                this.zoom_viewport.x -= delta / 2;
+                this.zoom_viewport.width = this.zoom_viewport.height;
             }
             this.clamp_zoom_viewport();
         }
