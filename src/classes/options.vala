@@ -350,9 +350,12 @@ namespace pdfpc {
             }
 
             public void setActionArg(string? actionArg) throws ConfigFileError {
-                if (this.actionName != "setPenColor" &&
-                    this.actionName != "switchMode"  &&
-                    this.actionName != "windowed") {
+                if (this.actionName != "gotoPage" &&
+                    this.actionName != "windowed" &&
+                    this.actionName != "switchMode" &&
+                    this.actionName != "setPenColor" &&
+                    this.actionName != "movePointer" &&
+                    this.actionName != "panZoom") {
                     throw new ConfigFileError.INVALID_BIND("No argument is expected");
                 }
 

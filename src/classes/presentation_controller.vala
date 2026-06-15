@@ -1428,7 +1428,7 @@ namespace pdfpc {
             add_action("toggleToolbox", this.toggle_toolbox,
                 "Toggle the toolbox");
 
-            add_action("zoom", this.zoom_highlighted,
+            add_action("zoom", this.toggle_zoom,
                 "Zoom in the highlighted area");
 
             add_action("toggleMaxCurrent", this.toggle_max_current_view,
@@ -2207,12 +2207,6 @@ namespace pdfpc {
         public void toggle_toolbox() {
             Options.toolbox_shown = !Options.toolbox_shown;
             this.controllables_update();
-        }
-
-        protected void zoom_highlighted() {
-            if (!this.in_zoom) {
-                this.toggle_zoom();
-            }
         }
 
         protected void toggle_max_current_view() {
